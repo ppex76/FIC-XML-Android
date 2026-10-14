@@ -1,0 +1,38 @@
+name: Build NMI SDI Windows EXE
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "windows/NMI_Invio_SDI_PC.py"
+      - ".github/workflows/build-nmi-sdi-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Build portable EXE
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name NMI-Invio-SDI-PC windows/NMI_Invio_SDI_PC.py
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: NMI-Invio-SDI-PC
+          path: dist/NMI-Invio-SDI-PC.exe
+          if-no-files-found: error
+          retention-days: 30
