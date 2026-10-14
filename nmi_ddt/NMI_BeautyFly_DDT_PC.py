@@ -15,10 +15,42 @@ except Exception as exc:
 else:
     FITZ_IMPORT_ERROR = None
 
-APP_TITLE = "NMI - Beauty Fly DDT + Listino"
+APP_TITLE = "NMI - Beauty Fly DDT + Listino v3"
 DEFAULT_CUSTOMER = "BEAUTY FLY"
 NMI_MARKER = "NMI DI PAOLO PEZZOTTA"
 PRICE_FILE = "NMI_BeautyFly_listino.json"
+
+DEFAULT_PRICES = [
+    {"code": "", "name": "AKQ", "price": 17.50},
+    {"code": "", "name": "ALKACELL", "price": 11.00},
+    {"code": "", "name": "ANSIREL", "price": 18.50},
+    {"code": "", "name": "ARTIVITAL", "price": 24.00},
+    {"code": "", "name": "B-NERV", "price": 8.50},
+    {"code": "", "name": "D-CELL", "price": 18.00},
+    {"code": "", "name": "DOPANATUR", "price": 24.00},
+    {"code": "", "name": "D-SHIELD", "price": 11.00},
+    {"code": "", "name": "EPACLEAN", "price": 19.50},
+    {"code": "", "name": "EPATOP", "price": 22.00},
+    {"code": "", "name": "FLOGUT", "price": 18.50},
+    {"code": "", "name": "FLORAGUT", "price": 23.00},
+    {"code": "", "name": "GLICONORM", "price": 19.00},
+    {"code": "", "name": "HYPNOS", "price": 14.50},
+    {"code": "", "name": "ISTAMINUS", "price": 21.00},
+    {"code": "", "name": "K2 NATTO", "price": 12.50},
+    {"code": "", "name": "LEAKYGUT", "price": 18.50},
+    {"code": "", "name": "LIPOCARDIOL", "price": 22.50},
+    {"code": "", "name": "LIPOIMMUN", "price": 17.50},
+    {"code": "", "name": "MAGCELL", "price": 15.00},
+    {"code": "", "name": "MELANIGHT", "price": 9.00},
+    {"code": "", "name": "MICOGUARD", "price": 23.00},
+    {"code": "", "name": "NUTRIGUT", "price": 19.00},
+    {"code": "", "name": "OMEGA BALANCE", "price": 28.50},
+    {"code": "", "name": "OSTEOVIX", "price": 17.50},
+    {"code": "", "name": "PERFORMA", "price": 22.50},
+    {"code": "", "name": "POLLIREX", "price": 15.00},
+    {"code": "", "name": "VACUMLAX", "price": 12.00},
+    {"code": "", "name": "VIROBACT", "price": 10.50},
+]
 
 
 def clean_line(s):
@@ -27,6 +59,19 @@ def clean_line(s):
 
 def norm_name(s):
     return re.sub(r"[^A-Z0-9]+", " ", clean_line(s).upper()).strip()
+
+
+def product_key(s):
+    x = norm_name(s)
+    # Toglie formato/confezione dal nome letto nel DDT: es. MAGCELL 120 CPS -> MAGCELL
+    x = re.sub(r"\b\d+(?:[\.,]\d+)?\b", " ", x)
+    x = re.sub(r"\b(CPS|CPR|PRL|ML|MG|G|GR|CAPS|CAPSULE|COMPRESSE|CP)\b", " ", x)
+    x = " ".join(x.split())
+    return x
+
+
+def compact_product_key(s):
+    return re.sub(r"[^A-Z0-9]", "", product_key(s))
 
 
 def fmt_qty(v):
@@ -71,10 +116,14 @@ def price_path():
     return app_folder() / PRICE_FILE
 
 
+def fresh_default_prices():
+    return [dict(x) for x in DEFAULT_PRICES]
+
+
 def load_prices():
     p = price_path()
     if not p.exists():
-        return []
+        return fresh_default_prices()
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, list):
@@ -91,10 +140,10 @@ def load_prices():
                 except Exception:
                     price = 0.0
                 out.append({"code": code, "name": name, "price": price})
-            return out
+            return out  # anche lista vuota: significa che l'utente ha premuto Cancella listino
     except Exception:
         pass
-    return []
+    return fresh_default_prices()
 
 
 def save_prices(prices):
@@ -103,14 +152,28 @@ def save_prices(prices):
 
 def get_price_for(prices, code, name):
     code = clean_line(code)
-    nn = norm_name(name)
     if code:
         for p in prices:
             if clean_line(p.get("code", "")) == code:
                 return float(p.get("price", 0)), p
+
+    target = compact_product_key(name)
+    exact = []
+    prefix = []
     for p in prices:
-        if norm_name(p.get("name", "")) == nn:
-            return float(p.get("price", 0)), p
+        pk = compact_product_key(p.get("name", ""))
+        if not pk:
+            continue
+        if pk == target:
+            exact.append(p)
+        elif len(pk) >= 3 and (target.startswith(pk) or pk.startswith(target)):
+            prefix.append(p)
+    if exact:
+        return float(exact[0].get("price", 0)), exact[0]
+    if prefix:
+        # preferisce il nome più lungo/specifico tra i candidati
+        prefix.sort(key=lambda p: len(compact_product_key(p.get("name", ""))), reverse=True)
+        return float(prefix[0].get("price", 0)), prefix[0]
     return None, None
 
 
@@ -141,11 +204,12 @@ def extract_order_refs(text):
         u = line.upper()
         if ("RIF.VS.ORD" in u or "RIF. VS. ORD" in u or "RIF.VS.MAIL" in u or
                 "RIF.VS. MAIL" in u or "VS. ORD." in u or "VS.ORD." in u or
-                u.startswith("RIF.VS.MAIL") or u.startswith("RIF.VS. MAIL")):
+                u.startswith("RIF.VS.MAIL") or u.startswith("RIF.VS. MAIL") or
+                u.startswith("RIF.VS.ORD") or u.startswith("RIF. VS. ORD")):
             value = line
             if i + 1 < len(lines):
                 nxt = lines[i + 1]
-                if re.fullmatch(r"[A-Z0-9]{8,20}", nxt.upper()):
+                if re.fullmatch(r"[A-Z0-9]{8,24}", nxt.upper()):
                     value += " " + nxt
             if value not in refs:
                 refs.append(value)
@@ -154,7 +218,6 @@ def extract_order_refs(text):
 
 def parse_products_from_page(text):
     lines = [clean_line(x) for x in text.splitlines() if clean_line(x)]
-
     start = 0
     for i, line in enumerate(lines):
         if "BONIFICO BANCARIO" in line.upper():
@@ -175,12 +238,10 @@ def parse_products_from_page(text):
         um = body[i + 1]
         qty_raw = body[i + 2]
         desc = body[i + 3]
-
         is_code = bool(re.fullmatch(r"\d{5,8}", code))
         is_um = bool(re.fullmatch(r"[A-Z]{1,5}", um.upper()))
         is_qty = bool(re.fullmatch(r"\d+(?:[\.,]\d+)?", qty_raw))
         bad_desc = desc.upper().startswith(("LOTTO:", "SCADENZA:", "TOTALE", "EUR"))
-
         if is_code and is_um and is_qty and not bad_desc:
             qty = float(qty_raw.replace(",", "."))
             items.append({"code": code, "description": desc, "qty": qty, "um": um.upper()})
@@ -193,7 +254,6 @@ def parse_products_from_page(text):
 def analyze_pdf(path, customer_key=DEFAULT_CUSTOMER):
     if fitz is None:
         raise RuntimeError("PyMuPDF non disponibile: %s" % FITZ_IMPORT_ERROR)
-
     key = clean_line(customer_key).upper()
     if not key:
         raise ValueError("Inserisci il cliente da cercare.")
@@ -204,21 +264,17 @@ def analyze_pdf(path, customer_key=DEFAULT_CUSTOMER):
     docs = {}
     order_refs = []
     row_count = 0
-
     try:
         for page_index in range(len(doc)):
             text = doc[page_index].get_text("text") or ""
             up = text.upper()
-
             if key not in up or "VENDITE" not in up or NMI_MARKER not in up:
                 continue
 
-            page_no = page_index + 1
-            selected_pages.append(page_no)
+            selected_pages.append(page_index + 1)
             document_no, document_date = extract_document_info(text, key)
             if document_no:
                 docs.setdefault(document_no, document_date)
-
             for ref in extract_order_refs(text):
                 if ref not in order_refs:
                     order_refs.append(ref)
@@ -234,14 +290,13 @@ def analyze_pdf(path, customer_key=DEFAULT_CUSTOMER):
                     totals[code]["description"] = item["description"]
 
         results = sorted(totals.values(), key=lambda x: (x["description"].upper(), x["code"]))
-        total_qty = sum(x["qty"] for x in results)
         return {
             "products": results,
             "pages": selected_pages,
             "documents": docs,
             "order_refs": order_refs,
             "row_count": row_count,
-            "total_qty": total_qty,
+            "total_qty": sum(x["qty"] for x in results),
             "total_pdf_pages": len(doc),
             "customer": customer_key,
         }
@@ -257,7 +312,6 @@ class PriceDialog(tk.Toplevel):
         self.result = None
         self.transient(parent)
         self.grab_set()
-
         item = item or {}
         self.code = tk.StringVar(value=item.get("code", ""))
         self.name = tk.StringVar(value=item.get("name", ""))
@@ -271,7 +325,6 @@ class PriceDialog(tk.Toplevel):
         ttk.Entry(frm, textvariable=self.name, width=34).grid(row=1, column=1, pady=4)
         ttk.Label(frm, text="Prezzo unitario €:").grid(row=2, column=0, sticky="w", pady=4)
         ttk.Entry(frm, textvariable=self.price, width=34).grid(row=2, column=1, pady=4)
-
         btn = ttk.Frame(frm)
         btn.grid(row=3, column=0, columnspan=2, sticky="e", pady=(12, 0))
         ttk.Button(btn, text="Annulla", command=self.destroy).pack(side="right")
@@ -298,8 +351,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("1120x760")
-        self.minsize(900, 620)
+        self.geometry("1150x780")
+        self.minsize(920, 620)
         self.result = None
         self.prices = load_prices()
         self.pdf_path = tk.StringVar()
@@ -312,9 +365,8 @@ class App(tk.Tk):
     def _build_ui(self):
         outer = ttk.Frame(self, padding=14)
         outer.pack(fill="both", expand=True)
-
         ttk.Label(outer, text="NMI - Quantità + Valore venduto per cliente", font=("Segoe UI", 18, "bold")).pack(anchor="w")
-        ttk.Label(outer, text="Analizza i DDT di VENDITA, somma i pezzi per prodotto e applica il tuo listino prezzi.", font=("Segoe UI", 10)).pack(anchor="w", pady=(2, 12))
+        ttk.Label(outer, text="Analizza i DDT di VENDITA, somma i pezzi per prodotto e applica il listino NMI.", font=("Segoe UI", 10)).pack(anchor="w", pady=(2, 12))
 
         frm = ttk.Frame(outer)
         frm.pack(fill="x")
@@ -324,7 +376,7 @@ class App(tk.Tk):
         ttk.Label(frm, text="PDF DDT:").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
         ttk.Entry(frm, textvariable=self.pdf_path, state="readonly").grid(row=1, column=1, sticky="ew", pady=4)
         ttk.Button(frm, text="Scegli PDF", command=self.choose_pdf).grid(row=1, column=2, padx=(8, 0), pady=4)
-        ttk.Button(frm, text="Listino prezzi", command=self.open_price_list).grid(row=1, column=3, padx=(8, 0), pady=4)
+        ttk.Button(frm, text="LISTINO PREZZI", command=self.open_price_list).grid(row=1, column=3, padx=(8, 0), pady=4)
 
         btns = ttk.Frame(outer)
         btns.pack(fill="x", pady=(10, 8))
@@ -340,7 +392,7 @@ class App(tk.Tk):
 
         ttk.Label(outer, textvariable=self.status, foreground="#344054").pack(anchor="w", pady=(3, 2))
         ttk.Label(outer, textvariable=self.summary, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 2))
-        ttk.Label(outer, textvariable=self.order_line, font=("Segoe UI", 9, "bold"), foreground="#475467", wraplength=1060).pack(anchor="w", pady=(0, 8))
+        ttk.Label(outer, textvariable=self.order_line, font=("Segoe UI", 9, "bold"), foreground="#475467", wraplength=1090).pack(anchor="w", pady=(0, 8))
 
         table_frame = ttk.Frame(outer)
         table_frame.pack(fill="both", expand=True)
@@ -359,7 +411,6 @@ class App(tk.Tk):
         self.tree.tag_configure("missing", background="#fff4e5")
         self.tree.tag_configure("meta", background="#eef2f6")
         self.tree.bind("<Double-1>", lambda e: self.set_selected_price())
-
         ysb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         xsb = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
@@ -369,7 +420,7 @@ class App(tk.Tk):
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
-        ttk.Label(outer, text="Il listino viene salvato accanto all'EXE come NMI_BeautyFly_listino.json. Doppio clic su un prodotto per assegnargli il prezzo.", font=("Segoe UI", 9), foreground="#667085").pack(anchor="w", pady=(8, 0))
+        ttk.Label(outer, text="Il listino iniziale è già caricato. Puoi aggiungere/modificare righe a mano oppure cancellare tutto il listino.", font=("Segoe UI", 9), foreground="#667085").pack(anchor="w", pady=(8, 0))
 
     def choose_pdf(self):
         path = filedialog.askopenfilename(title="Seleziona PDF DDT", filetypes=[("PDF", "*.pdf"), ("Tutti i file", "*.*")])
@@ -405,10 +456,8 @@ class App(tk.Tk):
         self.clear_table()
         if not self.result:
             return
-
         meta_text = self.build_order_text(self.result)
         self.tree.insert("", "end", iid="__meta__", values=("DDT/ORDINI", meta_text, "", "", ""), tags=("meta",))
-
         rows = self.enriched_products()
         missing = 0
         total_value = 0.0
@@ -424,13 +473,9 @@ class App(tk.Tk):
                 "MANCANTE" if row["price"] is None else fmt_money(row["price"]),
                 "" if row["total"] is None else fmt_money(row["total"]),
             ), tags=tags)
-
-        doc_count = len(self.result["documents"])
-        product_count = len(rows)
-        total_qty = fmt_qty(self.result["total_qty"])
         self.summary.set(
             "DDT distinti: %d   |   Prodotti: %d   |   Pezzi totali: %s   |   Valore: € %s   |   Prezzi mancanti: %d" %
-            (doc_count, product_count, total_qty, fmt_money(total_value), missing)
+            (len(self.result["documents"]), len(rows), fmt_qty(self.result["total_qty"]), fmt_money(total_value), missing)
         )
         self.order_line.set(meta_text)
 
@@ -446,7 +491,6 @@ class App(tk.Tk):
         if not customer:
             messagebox.showwarning(APP_TITLE, "Inserisci il cliente da cercare.")
             return
-
         self.status.set("Analisi in corso...")
         self.update_idletasks()
         try:
@@ -461,7 +505,6 @@ class App(tk.Tk):
             messagebox.showerror(APP_TITLE, "Errore durante la lettura del PDF:\n\n%s" % exc)
             self.status.set("Errore durante l'analisi.")
             return
-
         self.result = result
         if not result["pages"]:
             self.clear_table()
@@ -471,7 +514,6 @@ class App(tk.Tk):
             for b in (self.export_btn, self.copy_full_btn, self.copy_two_btn, self.price_btn):
                 b.configure(state="disabled")
             return
-
         self.refresh_table()
         self.status.set("Analisi completata. Pagine PDF incluse: %s" % ", ".join(map(str, result["pages"])))
         for b in (self.export_btn, self.copy_full_btn, self.copy_two_btn, self.price_btn):
@@ -498,15 +540,14 @@ class App(tk.Tk):
             if self.result:
                 messagebox.showinfo(APP_TITLE, "Seleziona una riga prodotto (non la riga DDT/ordini).")
             return
-        current_price, current = get_price_for(self.prices, item["code"], item["description"])
+        current_price, _ = get_price_for(self.prices, item["code"], item["description"])
         seed = {"code": item["code"], "name": item["description"], "price": current_price if current_price is not None else 0.0}
         dlg = PriceDialog(self, seed)
         self.wait_window(dlg)
-        if not dlg.result:
-            return
-        self.upsert_price(dlg.result)
-        self.refresh_table()
-        self.status.set("Prezzo salvato nel listino.")
+        if dlg.result:
+            self.upsert_price(dlg.result)
+            self.refresh_table()
+            self.status.set("Prezzo salvato nel listino.")
 
     def upsert_price(self, item, old_index=None):
         if old_index is not None:
@@ -517,7 +558,7 @@ class App(tk.Tk):
                 if item["code"] and clean_line(p.get("code", "")) == item["code"]:
                     found = i
                     break
-                if norm_name(p.get("name", "")) == norm_name(item["name"]):
+                if compact_product_key(p.get("name", "")) == compact_product_key(item["name"]):
                     found = i
                     break
             if found is None:
@@ -530,12 +571,12 @@ class App(tk.Tk):
     def open_price_list(self):
         win = tk.Toplevel(self)
         win.title("Listino prezzi NMI")
-        win.geometry("720x520")
+        win.geometry("760x560")
         win.transient(self)
         frm = ttk.Frame(win, padding=12)
         frm.pack(fill="both", expand=True)
         ttk.Label(frm, text="Listino prezzi", font=("Segoe UI", 16, "bold")).pack(anchor="w")
-        ttk.Label(frm, text="Puoi aggiungere nome prodotto e prezzo; il codice è facoltativo ma consigliato.").pack(anchor="w", pady=(2, 10))
+        ttk.Label(frm, text="Aggiungi righe a mano, modifica i prezzi o elimina singole voci. Il codice è facoltativo.").pack(anchor="w", pady=(2, 10))
 
         tv = ttk.Treeview(frm, columns=("code", "name", "price"), show="headings", selectmode="browse")
         tv.heading("code", text="Codice")
@@ -590,6 +631,26 @@ class App(tk.Tk):
                 if self.result:
                     self.refresh_table()
 
+        def clear_all():
+            if not self.prices:
+                return
+            if messagebox.askyesno(APP_TITLE, "Cancellare TUTTO il listino prezzi?\n\nL'operazione lascia il listino vuoto ma potrai aggiungere nuove righe a mano.", parent=win):
+                self.prices = []
+                save_prices(self.prices)
+                fill()
+                if self.result:
+                    self.refresh_table()
+                self.status.set("Listino prezzi cancellato.")
+
+        def restore_default():
+            if messagebox.askyesno(APP_TITLE, "Ripristinare il listino iniziale NMI?\nLe voci attuali verranno sostituite.", parent=win):
+                self.prices = fresh_default_prices()
+                save_prices(self.prices)
+                fill()
+                if self.result:
+                    self.refresh_table()
+                self.status.set("Listino NMI iniziale ripristinato.")
+
         def import_csv():
             path = filedialog.askopenfilename(parent=win, title="Importa listino CSV", filetypes=[("CSV", "*.csv"), ("Tutti i file", "*.*")])
             if not path:
@@ -643,14 +704,19 @@ class App(tk.Tk):
             except Exception as exc:
                 messagebox.showerror(APP_TITLE, str(exc), parent=win)
 
-        b = ttk.Frame(frm)
-        b.pack(fill="x", pady=(10, 0))
-        ttk.Button(b, text="Aggiungi", command=add).pack(side="left")
-        ttk.Button(b, text="Modifica", command=edit).pack(side="left", padx=6)
-        ttk.Button(b, text="Elimina", command=delete).pack(side="left")
-        ttk.Button(b, text="Importa CSV", command=import_csv).pack(side="left", padx=(18, 6))
-        ttk.Button(b, text="Esporta CSV", command=export_prices).pack(side="left")
-        ttk.Button(b, text="Chiudi", command=win.destroy).pack(side="right")
+        b1 = ttk.Frame(frm)
+        b1.pack(fill="x", pady=(10, 4))
+        ttk.Button(b1, text="+ Aggiungi riga", command=add).pack(side="left")
+        ttk.Button(b1, text="Modifica", command=edit).pack(side="left", padx=6)
+        ttk.Button(b1, text="Elimina riga", command=delete).pack(side="left")
+        ttk.Button(b1, text="CANCELLA LISTINO", command=clear_all).pack(side="left", padx=(18, 0))
+
+        b2 = ttk.Frame(frm)
+        b2.pack(fill="x", pady=(4, 0))
+        ttk.Button(b2, text="Ripristina listino iniziale", command=restore_default).pack(side="left")
+        ttk.Button(b2, text="Importa CSV", command=import_csv).pack(side="left", padx=(18, 6))
+        ttk.Button(b2, text="Esporta CSV", command=export_prices).pack(side="left")
+        ttk.Button(b2, text="Chiudi", command=win.destroy).pack(side="right")
         tv.bind("<Double-1>", lambda e: edit())
         fill()
 
