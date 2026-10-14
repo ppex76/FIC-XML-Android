@@ -1,0 +1,38 @@
+name: Build NMI BeautyFly DDT Windows EXE
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "nmi_ddt/**"
+      - ".github/workflows/build-nmi-beautyfly-ddt-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip pyinstaller pymupdf
+
+      - name: Build portable EXE
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name NMI-BeautyFly-DDT-PC nmi_ddt/NMI_BeautyFly_DDT_PC.py
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: NMI-BeautyFly-DDT-PC
+          path: dist/NMI-BeautyFly-DDT-PC.exe
+          if-no-files-found: error
+          retention-days: 30
