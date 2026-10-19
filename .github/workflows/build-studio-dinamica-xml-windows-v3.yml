@@ -1,0 +1,40 @@
+name: Build Studio Dinamica XML Windows EXE v3
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "windows/Studio_Dinamica_XML_NonElettroniche.py"
+      - "windows/Studio_Dinamica_XML_NonElettroniche_v2.py"
+      - "windows/Studio_Dinamica_XML_NonElettroniche_v3.py"
+      - ".github/workflows/build-studio-dinamica-xml-windows-v3.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip pyinstaller openpyxl
+
+      - name: Build portable EXE
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name Studio-Dinamica-XML-NonElettroniche-v3 windows/Studio_Dinamica_XML_NonElettroniche_v3.py
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Studio-Dinamica-XML-NonElettroniche-v3
+          path: dist/Studio-Dinamica-XML-NonElettroniche-v3.exe
+          if-no-files-found: error
+          retention-days: 30
