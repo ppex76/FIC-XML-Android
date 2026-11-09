@@ -1,0 +1,37 @@
+name: Build Studio v8 Elenco Fatture Leggibile
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "windows/Studio_v8_Fatture_Leggibili.py"
+      - "windows/Studio_Dinamica_XML_v8_Azienda_Editabile.py"
+      - ".github/workflows/build-studio-v8-fatture-leggibili.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyInstaller and openpyxl
+        run: python -m pip install --upgrade pip pyinstaller openpyxl
+      - name: Validate Python sources
+        run: python -m py_compile windows/Studio_v8_Fatture_Leggibili.py windows/Studio_Dinamica_XML_v8_Azienda_Editabile.py
+      - name: Build portable Windows executable
+        run: pyinstaller --noconfirm --clean --onefile --windowed --paths windows --name Studio-v8-Fatture-Leggibili windows/Studio_v8_Fatture_Leggibili.py
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Studio-v8-Fatture-Leggibili
+          path: dist/Studio-v8-Fatture-Leggibili.exe
+          if-no-files-found: error
+          retention-days: 30
