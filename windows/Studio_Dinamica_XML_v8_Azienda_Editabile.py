@@ -29,6 +29,30 @@ class App(v8.App):
             row=4, column=3, columnspan=2, sticky="w", pady=(10, 0))
         self.nome_azienda_input.trace_add("write", self._aggiorna_nome)
         self._aggiorna_nome()
+        # Il riepilogo occupa meno spazio; l'elenco fatture viene privilegiato.
+        self.summary_tree.configure(height=4)
+        self.invoice_tree.configure(height=16)
+        self.after(100, self._massimizza_finestra)
+        self.after(650, self._imposta_altezze_tabelle)
+
+    def _massimizza_finestra(self):
+        try:
+            self.state('zoomed')
+        except tk.TclError:
+            try:
+                self.attributes('-zoomed', True)
+            except tk.TclError:
+                pass
+
+    def _imposta_altezze_tabelle(self):
+        try:
+            panes = next(w for w in self.grid_slaves(row=2, column=0) if isinstance(w, ttk.Panedwindow))
+            height = panes.winfo_height()
+            if height > 260:
+                # 30% riepilogo; 70% elenco fatture. La barra resta trascinabile.
+                panes.sashpos(0, min(max(110, int(height * 0.30)), height - 150))
+        except (StopIteration, tk.TclError):
+            pass
 
     def _aggiorna_nome(self, *args):
         nome = self.nome_azienda_input.get().strip()
