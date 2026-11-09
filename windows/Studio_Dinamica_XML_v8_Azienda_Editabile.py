@@ -116,8 +116,23 @@ class App(v8.App):
         except Exception:
             pass
 
-    def verify(self):
-        # Stessa verifica dell'originale, senza l'avviso specifico su 'Dinamica'.
+    def creds(self):
+        # Il token deve essere una sola stringa ASCII senza spazi o testo di log.
+        # Impedisce che errori incollati per sbaglio finiscano nell'header Bearer.
+        company_id, token = super().creds()
+        if (
+            not token
+            or 'traceback' in token.casefold()
+            or any(ord(ch) < 33 or ord(ch) > 126 for ch in token)
+        ):
+            raise base.ApiError(
+                'Token personale non valido: contiene spazi, caratteri non ammessi '
+                'o testo di errore. Cancella il campo Token e incolla solo il token '
+                'originale di Fatture in Cloud (non un messaggio Traceback).'
+            )
+        return company_id, token
+
+    def verify(self):        # Stessa verifica dell'originale, senza l'avviso specifico su 'Dinamica'.
         # Il nome inserito dall'utente resta editabile e non viene sovrascritto.
         def job():
             try:
