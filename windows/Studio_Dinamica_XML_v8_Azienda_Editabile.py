@@ -29,11 +29,31 @@ class App(v8.App):
             row=4, column=3, columnspan=2, sticky="w", pady=(10, 0))
         self.nome_azienda_input.trace_add("write", self._aggiorna_nome)
         self._aggiorna_nome()
-        # Il riepilogo occupa meno spazio; l'elenco fatture viene privilegiato.
-        self.summary_tree.configure(height=4)
-        self.invoice_tree.configure(height=16)
+        # Le due tabelle sono AFFIANCATE, con divisore verticale trascinabile.
+        self.panes_affiancati = next(
+            w for w in self.grid_slaves(row=2, column=0)
+            if isinstance(w, ttk.Panedwindow)
+        )
+        self.panes_affiancati.configure(orient=tk.HORIZONTAL)
+
+        # Ogni tabella ha lo scorrimento orizzontale, cosi' tutte le
+        # colonne rimangono raggiungibili anche con finestre piu' strette.
+        summary_frame = self.summary_tree.master
+        barra_summary = ttk.Scrollbar(
+            summary_frame, orient=tk.HORIZONTAL, command=self.summary_tree.xview
+        )
+        self.summary_tree.configure(xscrollcommand=barra_summary.set, height=15)
+        barra_summary.grid(row=1, column=0, sticky="ew")
+
+        # La v8 possiede gia' la scrollbar orizzontale per le fatture.
+        # Evitiamo che le colonne si restringano fino a diventare illeggibili.
+        for tabella in (self.summary_tree, self.invoice_tree):
+            for colonna in tabella["columns"]:
+                tabella.column(colonna, stretch=False)
+        self.invoice_tree.configure(height=15)
+
         self.after(100, self._massimizza_finestra)
-        self.after(650, self._imposta_altezze_tabelle)
+        self.after(750, self._imposta_larghezze_tabelle)
 
     def _massimizza_finestra(self):
         try:
@@ -44,14 +64,14 @@ class App(v8.App):
             except tk.TclError:
                 pass
 
-    def _imposta_altezze_tabelle(self):
+    def _imposta_larghezze_tabelle(self):
         try:
-            panes = next(w for w in self.grid_slaves(row=2, column=0) if isinstance(w, ttk.Panedwindow))
-            height = panes.winfo_height()
-            if height > 260:
-                # 30% riepilogo; 70% elenco fatture. La barra resta trascinabile.
-                panes.sashpos(0, min(max(110, int(height * 0.30)), height - 150))
-        except (StopIteration, tk.TclError):
+            larghezza = self.panes_affiancati.winfo_width()
+            if larghezza > 650:
+                # 42% a sinistra (riepilogo), 58% a destra (fatture).
+                # Il separatore si puo' spostare con il mouse.
+                self.panes_affiancati.sashpos(0, int(larghezza * 0.42))
+        except tk.TclError:
             pass
 
     def _aggiorna_nome(self, *args):
