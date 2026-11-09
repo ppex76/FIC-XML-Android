@@ -11,7 +11,15 @@ import Studio_Dinamica_XML_NonElettroniche_v8 as v8
 class App(v8.App):
     def _build_ui(self):
         super()._build_ui()
-        self.nome_azienda_input = tk.StringVar(value="Studio Dinamica")
+        self.nome_azienda_input = tk.StringVar(value="")
+        self.intestazione_azienda = None
+        for frame in self.winfo_children():
+            if isinstance(frame, ttk.Frame) and frame.grid_info().get("row") == 0:
+                for widget in frame.winfo_children():
+                    if isinstance(widget, ttk.Label) and "Studio Dinamica" in str(widget.cget("text")):
+                        self.intestazione_azienda = widget
+                        break
+                break
         top = self.token_entry.master
         ttk.Label(top, text="Nome azienda").grid(
             row=4, column=0, sticky="w", pady=(10, 0))
@@ -26,6 +34,10 @@ class App(v8.App):
         nome = self.nome_azienda_input.get().strip()
         self.company_name = nome
         self.title(f"{nome or 'Fatture in Cloud'} — XML + Excel v8")
+        if self.intestazione_azienda is not None:
+            self.intestazione_azienda.configure(
+                text=f"{nome or 'Fatture in Cloud'} — Fatture non elettroniche"
+            )
 
     def _load_cfg(self):
         super()._load_cfg()
