@@ -10,7 +10,21 @@ import Studio_Dinamica_XML_NonElettroniche_v8 as v8
 
 class App(v8.App):
     def _build_ui(self):
-        super()._build_ui()
+        # ttk.Panedwindow imposta orient alla creazione: l'opzione e' read-only.
+        # Intercettiamo solo il pannello principale mentre la v8 crea la UI.
+        original_panedwindow = ttk.Panedwindow
+
+        class HorizontalPanedwindow(original_panedwindow):
+            def __init__(pane, master=None, **kwargs):
+                if master is self and kwargs.get('orient') == 'vertical':
+                    kwargs['orient'] = tk.HORIZONTAL
+                original_panedwindow.__init__(pane, master, **kwargs)
+
+        try:
+            ttk.Panedwindow = HorizontalPanedwindow
+            super()._build_ui()
+        finally:
+            ttk.Panedwindow = original_panedwindow
         self.nome_azienda_input = tk.StringVar(value="")
         self.intestazione_azienda = None
         for frame in self.winfo_children():
@@ -34,7 +48,6 @@ class App(v8.App):
             w for w in self.grid_slaves(row=2, column=0)
             if isinstance(w, ttk.Panedwindow)
         )
-        self.panes_affiancati.configure(orient=tk.HORIZONTAL)
 
         # Ogni tabella ha lo scorrimento orizzontale, cosi' tutte le
         # colonne rimangono raggiungibili anche con finestre piu' strette.
