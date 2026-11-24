@@ -44,6 +44,10 @@ jobs:
           app=m.App()
           app.update_idletasks()
           assert app.start_button.winfo_exists()
+          assert app.month_menu.winfo_exists()
+          assert app.month_menu['menu'].index('end') == 11
+          app.month_menu['menu'].invoke(1)
+          assert app.month.get() == 'Febbraio'
           app.destroy()
           print("OK GUI + FPR12 + STS inclusion + month")
           '@ | python -
