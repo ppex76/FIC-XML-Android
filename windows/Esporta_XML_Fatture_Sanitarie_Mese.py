@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 from datetime import date
 import calendar
 from pathlib import Path
-from tkinter import Tk, ttk, StringVar, Text, filedialog, messagebox, END
+from tkinter import Tk, ttk, StringVar, Text, OptionMenu, filedialog, messagebox, END
 from zipfile import ZipFile, ZIP_DEFLATED
 
 API = "https://api-v2.fattureincloud.it"
@@ -269,21 +269,36 @@ class App(Tk):
         ttk.Entry(frame, textvariable=self.token, show="•").grid(
             row=0, column=3, sticky="ew", padx=(8, 0))
 
-        ttk.Label(frame, text="Anno").grid(row=1, column=0, sticky="w", pady=(14, 0))
-        ttk.Combobox(frame, textvariable=self.year, state="readonly",
-                     values=[str(y) for y in range(date.today().year-5, date.today().year+2)],
-                     width=12).grid(row=1, column=1, sticky="w", padx=(8, 24), pady=(14, 0))
-        ttk.Label(frame, text="Mese da esportare").grid(row=1, column=2, sticky="w", pady=(14, 0))
-        ttk.Combobox(frame, textvariable=self.month, state="readonly",
-                     values=MONTHS, width=20).grid(
-                         row=1, column=3, sticky="w", padx=(8, 0), pady=(14, 0))
+        ttk.Label(frame, text="ANNO", font=("Segoe UI", 11, "bold")).grid(
+            row=1, column=0, sticky="w", pady=(14, 0))
+        ttk.Combobox(
+            frame, textvariable=self.year, state="readonly",
+            values=[str(y) for y in range(date.today().year-5, date.today().year+2)],
+            width=12
+        ).grid(row=1, column=1, sticky="w", padx=(8, 24), pady=(14, 0))
+
+        ttk.Label(
+            frame, text="SCEGLI IL MESE DA ESPORTARE",
+            font=("Segoe UI", 12, "bold")
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(17, 5))
+        # Un menu a tendina sempre visibile, con tutti e 12 i mesi.
+        # Il testo del pulsante cambia immediatamente quando si seleziona un mese.
+        self.month_menu = OptionMenu(frame, self.month, *MONTHS)
+        self.month_menu.configure(
+            font=("Segoe UI", 13, "bold"),
+            width=24, anchor="w", relief="raised",
+            padx=12, pady=7, cursor="hand2"
+        )
+        self.month_menu.grid(
+            row=3, column=0, columnspan=4, sticky="ew", pady=(0, 5)
+        )
 
         self.start_button = ttk.Button(
-            frame, text="ESPORTA XML DEL MESE", command=self.start)
-        self.start_button.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(20, 8))
+            frame, text="ESPORTA XML DEL MESE SELEZIONATO", command=self.start)
+        )
+        self.start_button.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(16, 8))
         ttk.Label(frame, textvariable=self.status, wraplength=750).grid(
-            row=3, column=0, columnspan=4, sticky="w", pady=(3, 0))
-
+            row=5, column=0, columnspan=4, sticky="w", pady=(3, 0))
         output = ttk.Frame(self, padding=(18, 0, 18, 14))
         output.grid(row=1, column=0, sticky="nsew")
         output.columnconfigure(0, weight=1)
