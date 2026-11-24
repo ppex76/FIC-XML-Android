@@ -294,7 +294,7 @@ class App(Tk):
         )
 
         self.start_button = ttk.Button(
-            frame, text="ESPORTA XML DEL MESE SELEZIONATO", command=self.start)
+            frame, text="ESPORTA XML DEL MESE SELEZIONATO", command=self.start
         )
         self.start_button.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(16, 8))
         ttk.Label(frame, textvariable=self.status, wraplength=750).grid(
