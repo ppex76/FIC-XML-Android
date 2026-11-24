@@ -1,0 +1,60 @@
+name: Build Export XML Sanitarie Mese Windows EXE
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "windows/Esporta_XML_Fatture_Sanitarie_Mese.py"
+      - ".github/workflows/build-export-xml-sanitarie-mese.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax check
+        run: python -m py_compile windows/Esporta_XML_Fatture_Sanitarie_Mese.py
+      - name: Check FPR12 and non-electronic filter
+        shell: pwsh
+        run: |
+          @'
+          import sys
+          sys.path.insert(0, "windows")
+          import Esporta_XML_Fatture_Sanitarie_Mese as m
+          from tkinter import TclError
+          b = b'<?xml version="1.0"?><p:FatturaElettronica xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" versione="FPR12"><FatturaElettronicaHeader><DatiTrasmissione><FormatoTrasmissione>FPR12</FormatoTrasmissione></DatiTrasmissione></FatturaElettronicaHeader><FatturaElettronicaBody /></p:FatturaElettronica>'
+          m.validate_fpr12(b)
+          assert m.is_non_electronic({"type":"invoice","number":38,"numeration":"/SAN","ts_status":"sent"})
+          assert m.is_non_electronic({"type":"invoice","number":39,"numeration":"/SAN","ts_status":"not_sent"})
+          assert m.is_non_electronic({"type":"invoice","number":40,"numeration":"/SAN","e_invoice":True,"ei_status":"not_sent"})
+          assert not m.is_non_electronic({"type":"invoice","number":44,"numeration":"EL"})
+          assert m.month_bounds(2026,2) == ("2026-02-01","2026-02-28")
+          try:
+              m.validate_fpr12(b.replace(b'FPR12', b'FPA12'))
+              raise AssertionError("FPA12 accepted")
+          except m.ExportError:
+              pass
+          app=m.App()
+          app.update_idletasks()
+          assert app.start_button.winfo_exists()
+          app.destroy()
+          print("OK GUI + FPR12 + STS inclusion + month")
+          '@ | python -
+      - name: Install Windows packager
+        run: python -m pip install pyinstaller
+      - name: Build EXE
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name Esporta-XML-Fatture-Sanitarie-Mese windows/Esporta_XML_Fatture_Sanitarie_Mese.py
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Esporta-XML-Fatture-Sanitarie-Mese
+          path: dist/Esporta-XML-Fatture-Sanitarie-Mese.exe
+          if-no-files-found: error
+          retention-days: 30
