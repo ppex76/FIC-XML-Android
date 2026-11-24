@@ -14,7 +14,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import date, calendar
+from datetime import date
+import calendar
 from pathlib import Path
 from tkinter import Tk, ttk, StringVar, Text, filedialog, messagebox, END
 from zipfile import ZipFile, ZIP_DEFLATED
